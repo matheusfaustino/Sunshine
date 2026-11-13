@@ -894,7 +894,7 @@ namespace rtsp_stream {
       }
 
       // Secondary-path copies reuse the encrypted video bytes, so only offer multilink when video can be encrypted.
-      if (config::stream.multilink.mode != multilink::mode_e::disabled) {
+      if (config::stream.ml.mode != multilink::mode_e::disabled) {
         ss << "a=x-mp-general.version:1"sv << std::endl;
       }
     }
@@ -1121,7 +1121,7 @@ namespace rtsp_stream {
         config.encryptionFlagsEnabled |= SS_ENC_AUDIO;
       }
 
-      if (config::stream.multilink.mode != multilink::mode_e::disabled && util::from_view(args.at("x-mp-general.request"sv)) == 1) {
+      if (config::stream.ml.mode != multilink::mode_e::disabled && util::from_view(args.at("x-mp-general.request"sv)) == 1) {
         config.multilink = (config.encryptionFlagsEnabled & SS_ENC_VIDEO) != 0;
         BOOST_LOG(info) << "multilink: client requested, "sv << (config.multilink ? "enabled"sv : "refused (video encryption is off for this session)"sv);
       }

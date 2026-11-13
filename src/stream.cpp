@@ -529,7 +529,7 @@ namespace stream {
 
       std::unique_ptr<platf::deinit_t> qos;  ///< Lifetime guard for video-socket QoS configuration.
 
-      multilink::state_t multilink;  ///< Secondary-path state; idle unless `config.multilink` is set.
+      multilink::state_t ml;  ///< Secondary-path state; idle unless `config.multilink` is set.
     } video;  ///< Video worker thread state for the active stream.
 
     struct {
@@ -1463,7 +1463,7 @@ namespace stream {
     }
 
     auto &session = *it->second;
-    auto &ml = session.video.multilink;
+    auto &ml = session.video.ml;
     auto reject = [&](std::atomic<std::uint64_t> &counter, std::string_view reason) {
       if (++counter == 1) {
         BOOST_LOG(warning) << "multilink: rejected association ["sv << reason << "] from "sv << from.address().to_string() << ':' << from.port();
@@ -1853,14 +1853,15 @@ namespace stream {
           // Multilink: plan which shards skip the primary (test impairments) and which are also sent
           // on the secondary path. Shard bytes, sequence numbers and nonces are never touched.
           multipath_fec::shard_plan_t ml_plan;
-          auto &ml = session->video.multilink;
-          const auto ml_mode = config::stream.multilink.mode;
+          auto &ml = session->video.ml;
+          const auto ml_mode = config::stream.ml.mode;
           if (session->config.multilink) {
             const auto ml_now = std::chrono::steady_clock::now();
             const auto ml_now_ms = multilink::now_ms();
             if (ml.started == std::chrono::steady_clock::time_point {}) {
               ml.started = ml_now;
-              ml.cap.rate = config::stream.multilink.secondary_max_kbps * 125.0;
+              ml.last_log = ml_now;
+              ml.cap.rate = config::stream.ml.secondary_max_kbps * 125.0;
               ml.cap.burst = std::max(ml.cap.rate / 10, 64.0 * 1024);
             }
             const bool fresh = ml.fresh(ml_now_ms);
@@ -1888,7 +1889,7 @@ namespace stream {
             }
 
             // Test impairments only ever suppress shards on the primary path.
-            const auto &test = config::stream.multilink;
+            const auto &test = config::stream.ml;
             const auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(ml_now - ml.started).count();
             const bool outage = test.test_outage_primary_duration_s > 0 && elapsed_s >= test.test_outage_primary_start_s &&
                                 elapsed_s < test.test_outage_primary_start_s + test.test_outage_primary_duration_s;
@@ -2068,9 +2069,9 @@ namespace stream {
 
         if (session->config.multilink) {
           const auto log_now = std::chrono::steady_clock::now();
-          if (log_now - session->video.multilink.last_log >= 10s) {
-            session->video.multilink.last_log = log_now;
-            BOOST_LOG(info) << session->video.multilink.summary(config::stream.multilink.mode, false);
+          if (log_now - session->video.ml.last_log >= 10s) {
+            session->video.ml.last_log = log_now;
+            BOOST_LOG(info) << session->video.ml.summary(config::stream.ml.mode, false);
           }
         }
       } catch (const std::exception &e) {
@@ -2392,7 +2393,7 @@ namespace stream {
           std::lock_guard lg {multilink_mutex};
           multilink_sessions.erase(session->video.ping_payload);
         }
-        BOOST_LOG(info) << session->video.multilink.summary(config::stream.multilink.mode, true);
+        BOOST_LOG(info) << session->video.ml.summary(config::stream.ml.mode, true);
       }
     });
 

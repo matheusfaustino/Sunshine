@@ -274,7 +274,7 @@ namespace config {
 
     bool dscp_tagging;  ///< Allow DSCP tagging of audio and video traffic when requested by the client.
 
-    multilink::config_t multilink;  ///< Optional duplication of video over a second network path.
+    multilink::config_t ml;  ///< Optional duplication of video over a second network path.
   };
 
   /**
