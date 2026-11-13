@@ -9,6 +9,12 @@
 // local includes
 #include <src/multilink.h>
 
+TEST(MultilinkTest, PacksHostOrderAddressWithoutLosingHighBits) {
+  EXPECT_EQ(multilink::pack(0xc0a844a8u, 48098), 0xc0a844a8bbe2ull);
+  EXPECT_EQ(multilink::pack(0xffffffffu, 65535), 0xffffffffffffull);
+  EXPECT_EQ(multilink::pack(0, 0), 0);
+}
+
 TEST(MultilinkTest, ParsesOnlyVersionOnePathOneAssociation) {
   std::string d = std::string("MLMP") + '\x01' + "0123456789abcdef" + '\x01';
   ASSERT_EQ(d.size(), multilink::ASSOC_SIZE);

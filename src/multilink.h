@@ -18,9 +18,6 @@
 #include <string>
 #include <string_view>
 
-// lib includes
-#include <boost/asio/ip/address_v4.hpp>
-
 namespace multilink {
   enum class mode_e {
     disabled,  ///< Feature off; behaviour is unchanged.
@@ -82,11 +79,11 @@ namespace multilink {
 
   /**
    * @brief Pack an IPv4 endpoint into one word so threads can share it lock-free; 0 means none.
-   * @param address IPv4 address.
+   * @param address IPv4 address as a host-order integer.
    * @param port UDP port.
    */
-  inline std::uint64_t pack(const boost::asio::ip::address_v4 &address, std::uint16_t port) {
-    return (static_cast<std::uint64_t>(address.to_uint()) << 16) | port;
+  inline std::uint64_t pack(std::uint32_t address, std::uint16_t port) {
+    return (static_cast<std::uint64_t>(address) << 16) | port;
   }
 
   /// Steady-clock milliseconds.

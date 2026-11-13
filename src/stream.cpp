@@ -1477,7 +1477,7 @@ namespace stream {
     } else if (from == session.video.peer) {
       reject(ml.rej_primary_endpoint, "primary_endpoint"sv);
     } else {
-      auto packed = multilink::pack(from.address().to_v4(), from.port());
+      auto packed = multilink::pack(from.address().to_v4().to_uint(), from.port());
       auto now = multilink::now_ms();
       bool was_fresh = ml.fresh(now);
       auto previous = ml.peer.load();
