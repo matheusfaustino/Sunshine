@@ -26,6 +26,8 @@
 #include "globals.h"
 #include "input.h"
 #include "logging.h"
+#include "multilink.h"
+#include "multipath_fec.h"
 #include "network.h"
 #include "platform/common.h"
 #include "process.h"
@@ -526,6 +528,8 @@ namespace stream {
       safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;  ///< Event carrying the reference-frame range to invalidate.
 
       std::unique_ptr<platf::deinit_t> qos;  ///< Lifetime guard for video-socket QoS configuration.
+
+      multilink::state_t ml;  ///< Secondary-path state; idle unless `config.multilink` is set.
     } video;  ///< Video worker thread state for the active stream.
 
     struct {
@@ -1443,6 +1447,48 @@ namespace stream {
     server->flush();
   }
 
+  // Sessions with multilink negotiated, keyed by ping payload. An entry exists only while the
+  // session's videoThread runs, which is what keeps the pointer valid for the receive thread.
+  std::mutex multilink_mutex;
+  std::map<std::string, session_t *, std::less<>> multilink_sessions;
+
+  /**
+   * @brief Record the source of a valid association datagram as the session's secondary endpoint.
+   */
+  void multilink_associate(const udp::endpoint &from, std::string_view token) {
+    std::lock_guard lg {multilink_mutex};
+    auto it = multilink_sessions.find(token);
+    if (it == multilink_sessions.end()) {
+      return;
+    }
+
+    auto &session = *it->second;
+    auto &ml = session.video.ml;
+    auto reject = [&](std::atomic<std::uint64_t> &counter, std::string_view reason) {
+      if (++counter == 1) {
+        BOOST_LOG(warning) << "multilink: rejected association ["sv << reason << "] from "sv << from.address().to_string() << ':' << from.port();
+      }
+    };
+
+    if (!ml.assoc_limit.take(1, std::chrono::steady_clock::now())) {
+      reject(ml.rej_rate_limited, "rate_limited"sv);
+    } else if (!from.address().is_v4()) {
+      reject(ml.rej_not_ipv4, "not_ipv4"sv);
+    } else if (from == session.video.peer) {
+      reject(ml.rej_primary_endpoint, "primary_endpoint"sv);
+    } else {
+      auto packed = multilink::pack(from.address().to_v4().to_uint(), from.port());
+      auto now = multilink::now_ms();
+      bool was_fresh = ml.fresh(now);
+      auto previous = ml.peer.load();
+      ml.last_seen_ms = now;
+      ml.peer = packed;
+      if (!was_fresh || previous != packed) {
+        BOOST_LOG(info) << "multilink: associated secondary "sv << from.address().to_string() << ':' << from.port();
+      }
+    }
+  }
+
   /**
    * @brief Receive thread data.
    *
@@ -1512,6 +1558,13 @@ namespace stream {
         if (ec || !bytes) {
           BOOST_LOG(error) << "Couldn't receive data from udp socket: "sv << ec.message();
           return;
+        }
+
+        if (buf_elem == 0 && bytes == multilink::ASSOC_SIZE) {
+          if (auto token = multilink::parse_association({buf[0].data(), bytes})) {
+            multilink_associate(peer, *token);
+            return;
+          }
         }
 
         if (bytes == 4) {
@@ -1797,6 +1850,64 @@ namespace stream {
             session->localAddress,
           };
 
+          // Multilink: plan which shards skip the primary (test impairments) and which are also sent
+          // on the secondary path. Shard bytes, sequence numbers and nonces are never touched.
+          multipath_fec::shard_plan_t ml_plan;
+          auto &ml = session->video.ml;
+          const auto ml_mode = config::stream.ml.mode;
+          if (session->config.multilink) {
+            const auto ml_now = std::chrono::steady_clock::now();
+            const auto ml_now_ms = multilink::now_ms();
+            if (ml.started == std::chrono::steady_clock::time_point {}) {
+              ml.started = ml_now;
+              ml.last_log = ml_now;
+              ml.cap.rate = config::stream.ml.secondary_max_kbps * 125.0;
+              ml.cap.burst = std::max(ml.cap.rate / 10, 64.0 * 1024);
+            }
+            const bool fresh = ml.fresh(ml_now_ms);
+            if (fresh != ml.active) {
+              ml.active = fresh;
+              if (!fresh) {
+                BOOST_LOG(warning) << "multilink: no association datagram for 2s, secondary sends stopped"sv;
+              }
+            }
+
+            const auto nr_shards = static_cast<std::uint32_t>(shards.size());
+            if (ml.active) {
+              if (ml_mode == multilink::mode_e::parity) {
+                // Parity-only copies via the PoC planner; it never drops on the primary here.
+                multipath_fec::config_t parity_config;
+                parity_config.enabled = true;
+                parity_config.copy_parity = SIZE_MAX;
+                parity_config.byte_cap = SIZE_MAX;
+                ml_plan = multipath_fec::plan(parity_config, 0, nr_shards, shards.data_shards, shards.blocksize);
+              } else {
+                for (std::uint32_t i = 0; i < nr_shards; ++i) {
+                  ml_plan.secondary_send.push_back(i);
+                }
+              }
+            }
+
+            // Test impairments only ever suppress shards on the primary path.
+            const auto &test = config::stream.ml;
+            const auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(ml_now - ml.started).count();
+            const bool outage = test.test_outage_primary_duration_s > 0 && elapsed_s >= test.test_outage_primary_start_s &&
+                                elapsed_s < test.test_outage_primary_start_s + test.test_outage_primary_duration_s;
+            const int phase = test.test_outage_primary_duration_s <= 0 || elapsed_s < test.test_outage_primary_start_s ? 0 : (outage ? 1 : 2);
+            if (phase != ml.outage_phase) {
+              ml.outage_phase = phase;
+              BOOST_LOG(warning) << "multilink: test primary outage "sv << (phase == 1 ? "started"sv : "ended"sv);
+            }
+            const auto parity_shards = nr_shards - static_cast<std::uint32_t>(shards.data_shards);
+            const bool drop_block = test.test_drop_every_n_blocks > 0 && ++ml.blocks % test.test_drop_every_n_blocks == 0;
+            if (outage || drop_block) {
+              // P+1 trailing shards: more than FEC can repair on the primary alone.
+              for (std::uint32_t i = outage ? 0 : nr_shards - std::min(nr_shards, parity_shards + 1); i < nr_shards; ++i) {
+                ml_plan.primary_drop.push_back(i);
+              }
+            }
+          }
+
           size_t next_shard_to_send = 0;
 
           // RTP video timestamps use a 90 KHz clock and the frame_timestamp from when the frame was captured
@@ -1868,24 +1979,66 @@ namespace stream {
               batch_info.block_count = current_batch_size;
 
               frame_send_batch_latency_logger.first_point_now();
-              // Use a batched send if it's supported on this platform
-              if (!platf::send_batch(batch_info)) {
-                // Batched send is not available, so send each packet individually
-                BOOST_LOG(verbose) << "Falling back to unbatched send"sv;
-                for (auto y = 0; y < current_batch_size; y++) {
-                  auto send_info = platf::send_info_t {
-                    shards.prefix(next_shard_to_send + y),
-                    shards.prefixsize,
-                    shards.data(next_shard_to_send + y),
-                    shards.blocksize,
-                    (uintptr_t) sock.native_handle(),
-                    peer_address,
-                    session->video.peer.port(),
-                    session->localAddress,
-                  };
+              // Primary shards go out first; secondary copies (if any) follow and never delay them.
+              auto batch_primary = [&](std::uint32_t, std::uint32_t) {
+                return platf::send_batch(batch_info);
+              };
+              auto send_primary = [&](std::uint32_t index) {
+                auto send_info = platf::send_info_t {
+                  shards.prefix(index),
+                  shards.prefixsize,
+                  shards.data(index),
+                  shards.blocksize,
+                  (uintptr_t) sock.native_handle(),
+                  peer_address,
+                  session->video.peer.port(),
+                  session->localAddress,
+                };
 
-                  platf::send(send_info);
+                platf::send(send_info);
+              };
+              auto send_secondary = [&](std::uint32_t index) {
+                const size_t shard_bytes = shards.blocksize + shards.prefixsize;
+                if (!ml.cap.take(static_cast<double>(shard_bytes), std::chrono::steady_clock::now())) {
+                  ++ml.cap_skips;
+                  return;
                 }
+
+                const auto endpoint = ml.peer.load();
+                auto secondary_address = boost::asio::ip::address {boost::asio::ip::address_v4 {static_cast<std::uint32_t>(endpoint >> 16)}};
+                auto send_info = platf::send_info_t {
+                  shards.prefix(index),
+                  shards.prefixsize,
+                  shards.data(index),
+                  shards.blocksize,
+                  (uintptr_t) sock.native_handle(),
+                  secondary_address,
+                  static_cast<std::uint16_t>(endpoint & 0xFFFF),
+                  session->localAddress,
+                };
+
+                if (platf::send(send_info)) {
+                  ++ml.secondary_shards;
+                  ml.secondary_bytes += shard_bytes;
+                } else {
+                  ++ml.send_errors;
+                }
+              };
+              auto on_batch_fallback = [&]() {
+                BOOST_LOG(verbose) << "Falling back to unbatched send"sv;
+              };
+
+              auto primary_sent = multipath_fec::dispatch_block(
+                static_cast<std::uint32_t>(next_shard_to_send),
+                static_cast<std::uint32_t>(next_shard_to_send + current_batch_size),
+                ml_plan,
+                batch_primary,
+                send_primary,
+                send_secondary,
+                on_batch_fallback
+              );
+              if (session->config.multilink) {
+                ml.primary_shards += primary_sent;
               }
               frame_send_batch_latency_logger.second_point_now_and_log();
 
@@ -1913,6 +2066,14 @@ namespace stream {
         });
 
         session->video.lowseq = lowseq;
+
+        if (session->config.multilink) {
+          const auto log_now = std::chrono::steady_clock::now();
+          if (log_now - session->video.ml.last_log >= 10s) {
+            session->video.ml.last_log = log_now;
+            BOOST_LOG(info) << session->video.ml.summary(config::stream.ml.mode, false);
+          }
+        }
       } catch (const std::exception &e) {
         BOOST_LOG(error) << "Broadcast video failed "sv << e.what();
         std::this_thread::sleep_for(100ms);
@@ -2221,6 +2382,20 @@ namespace stream {
     if (error < 0) {
       return;
     }
+
+    if (session->config.multilink) {
+      std::lock_guard lg {multilink_mutex};
+      multilink_sessions[session->video.ping_payload] = session;
+    }
+    auto multilink_cleanup = util::fail_guard([&]() {
+      if (session->config.multilink) {
+        {
+          std::lock_guard lg {multilink_mutex};
+          multilink_sessions.erase(session->video.ping_payload);
+        }
+        BOOST_LOG(info) << session->video.ml.summary(config::stream.ml.mode, true);
+      }
+    });
 
     // Enable local prioritization and QoS tagging on video traffic if requested by the client
     auto address = session->video.peer.address();

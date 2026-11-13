@@ -98,6 +98,11 @@
     "nameKey": "config.category_advanced",
     "options": {
       "fec_percentage": 20,
+      "multilink": "disabled",
+      "multilink_secondary_max_kbps": 0,
+      "multilink_test_drop_every_n_blocks": 0,
+      "multilink_test_outage_primary_start_s": 0,
+      "multilink_test_outage_primary_duration_s": 0,
       "qp": 28,
       "min_threads": 2,
       "hevc_mode": 0,

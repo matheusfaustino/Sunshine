@@ -49,6 +49,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   build-docker:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Docker
     needs: release-setup
     permissions:
@@ -70,6 +71,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-freebsd:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: FreeBSD
     needs: release-setup
     permissions:
@@ -80,6 +82,7 @@ jobs:
       release_version: ${{ needs.release-setup.outputs.release_version }}
 
   build-homebrew:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Homebrew
     needs: release-setup
     permissions:
@@ -96,6 +99,7 @@ jobs:
       GIT_EMAIL: ${{ secrets.GH_BOT_EMAIL }}
 
   build-macos:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: macOS
     needs: release-setup
     permissions:
@@ -116,6 +120,7 @@ jobs:
         ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_P12_PASSWORD }}
 
   build-linux:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Linux
     needs: release-setup
     permissions:
@@ -126,6 +131,7 @@ jobs:
       release_version: ${{ needs.release-setup.outputs.release_version }}
 
   build-archlinux:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Archlinux
     needs: release-setup
     permissions:
@@ -136,6 +142,7 @@ jobs:
       release_version: ${{ needs.release-setup.outputs.release_version }}
 
   build-alpine:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Alpine
     needs: release-setup
     permissions:
@@ -146,8 +153,8 @@ jobs:
       release_version: ${{ needs.release-setup.outputs.release_version }}
 
   build-linux-copr:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Linux Copr
-    if: github.event_name != 'push'  # releases are handled directly in ci-release.yml
     needs: release-setup
     permissions:
       contents: write  # needed to update releases
@@ -159,6 +166,7 @@ jobs:
       VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
   build-linux-flatpak:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Linux Flatpak
     needs: release-setup
     permissions:
@@ -187,12 +195,14 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
   test-powershell:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: PowerShell
     permissions:
       contents: read
     uses: ./.github/workflows/ci-powershell.yml
 
   web-ui:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Web UI
     needs: release-setup
     permissions:
@@ -204,11 +214,8 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   coverage:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Coverage-${{ matrix.name }}
-    if: >-
-      always() &&
-      !cancelled() &&
-      needs.organization.outputs.allowed == 'true'
     needs:
       - organization
       - build-freebsd
@@ -296,10 +303,8 @@ jobs:
           verbose: true
 
   release:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Release
-    if:
-      needs.release-setup.outputs.publish_release == 'true' &&
-      needs.organization.outputs.allowed == 'true'
     needs:
       - organization
       - release-setup
@@ -339,10 +344,8 @@ jobs:
           virustotal_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
   release-homebrew-beta:
+    if: false  # Temporarily disabled for the Windows-only multilink experiment.
     name: Release Homebrew Beta
-    if:
-      needs.release-setup.outputs.publish_release == 'true' &&
-      needs.organization.outputs.allowed == 'true'
     needs:
       - organization
       - release-setup

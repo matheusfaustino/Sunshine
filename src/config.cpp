@@ -815,6 +815,7 @@ namespace config {
     ENCRYPTION_MODE_OPPORTUNISTIC,  // wan_encryption_mode
     0,  // packetsize
     true,  // dscp_tagging
+    {},  // ml
   };
 
   /**
@@ -1781,6 +1782,18 @@ namespace config {
     int_between_f(vars, "wan_encryption_mode", stream.wan_encryption_mode, {0, 2});
     int_between_f(vars, "packetsize", stream.packetsize, {0, PACKETSIZE_MAX});
     bool_f(vars, "dscp_tagging", stream.dscp_tagging);
+
+    {
+      std::string mode = "disabled";
+      string_restricted_f(vars, "multilink", mode, {"disabled"sv, "duplicate"sv, "parity"sv});
+      stream.ml.mode = mode == "duplicate" ? multilink::mode_e::duplicate : mode == "parity" ? multilink::mode_e::parity :
+                                                                                               multilink::mode_e::disabled;
+      constexpr std::pair<int, int> non_negative {0, std::numeric_limits<int>::max()};
+      int_between_f(vars, "multilink_secondary_max_kbps", stream.ml.secondary_max_kbps, non_negative);
+      int_between_f(vars, "multilink_test_drop_every_n_blocks", stream.ml.test_drop_every_n_blocks, non_negative);
+      int_between_f(vars, "multilink_test_outage_primary_start_s", stream.ml.test_outage_primary_start_s, non_negative);
+      int_between_f(vars, "multilink_test_outage_primary_duration_s", stream.ml.test_outage_primary_duration_s, non_negative);
+    }
 
     path_f(vars, "file_apps", stream.file_apps);
 #ifndef __ANDROID__

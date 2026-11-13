@@ -14,6 +14,7 @@
 #include <vector>
 
 // local includes
+#include "multilink.h"
 #include "nvenc/nvenc_config.h"
 #include "string_hash.h"
 
@@ -272,6 +273,8 @@ namespace config {
     int packetsize;  ///< Maximum payload size for network packets.
 
     bool dscp_tagging;  ///< Allow DSCP tagging of audio and video traffic when requested by the client.
+
+    multilink::config_t ml;  ///< Optional duplication of video over a second network path.
   };
 
   /**
