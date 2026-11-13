@@ -2148,6 +2148,98 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
     </tr>
 </table>
 
+### multilink_secondary_max_kbps
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Maximum bitrate (in Kbps) sent over the second path. <code>0</code> is unlimited.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            multilink_secondary_max_kbps = 20000
+            @endcode</td>
+    </tr>
+</table>
+
+### multilink_test_drop_every_n_blocks
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Testing only. Drop primary-path shards of every Nth FEC block. <code>0</code> disables.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            multilink_test_drop_every_n_blocks = 50
+            @endcode</td>
+    </tr>
+</table>
+
+### multilink_test_outage_primary_start_s
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Testing only. Seconds after stream start when a simulated primary-path outage begins.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            multilink_test_outage_primary_start_s = 10
+            @endcode</td>
+    </tr>
+</table>
+
+### multilink_test_outage_primary_duration_s
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Testing only. Duration in seconds of the simulated primary-path outage. <code>0</code> disables.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            multilink_test_outage_primary_duration_s = 5
+            @endcode</td>
+    </tr>
+</table>
+
 ### qp
 
 <table>
