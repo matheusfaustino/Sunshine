@@ -58,9 +58,9 @@ namespace multilink {
    */
   struct token_bucket_t {
     double rate = 0;  ///< Units per second.
-    double burst = 0;
-    double tokens = 0;
-    std::chrono::steady_clock::time_point last {};
+    double burst = 0;  ///< Bucket capacity.
+    double tokens = 0;  ///< Tokens currently available.
+    std::chrono::steady_clock::time_point last {};  ///< Time of the last refill.
 
     bool take(double n, std::chrono::steady_clock::time_point now) {
       if (rate <= 0) {
@@ -80,11 +80,16 @@ namespace multilink {
     }
   };
 
-  /// IPv4 endpoint packed into one word so it can be shared between threads lock-free; 0 is "none".
+  /**
+   * @brief Pack an IPv4 endpoint into one word so threads can share it lock-free; 0 means none.
+   * @param address IPv4 address.
+   * @param port UDP port.
+   */
   inline std::uint64_t pack(const boost::asio::ip::address_v4 &address, std::uint16_t port) {
     return (static_cast<std::uint64_t>(address.to_uint()) << 16) | port;
   }
 
+  /// Steady-clock milliseconds.
   inline std::int64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
   }
@@ -94,33 +99,40 @@ namespace multilink {
    */
   struct state_t {
     std::atomic<std::uint64_t> peer {0};  ///< Packed secondary endpoint.
-    std::atomic<std::int64_t> last_seen_ms {0};
-    std::atomic<std::uint64_t> rej_primary_endpoint {0};
-    std::atomic<std::uint64_t> rej_not_ipv4 {0};
-    std::atomic<std::uint64_t> rej_rate_limited {0};
+    std::atomic<std::int64_t> last_seen_ms {0};  ///< Steady-clock time of the last valid association datagram.
+    std::atomic<std::uint64_t> rej_primary_endpoint {0};  ///< Associations rejected: source equals the primary peer.
+    std::atomic<std::uint64_t> rej_not_ipv4 {0};  ///< Associations rejected: source is not IPv4.
+    std::atomic<std::uint64_t> rej_rate_limited {0};  ///< Associations rejected: too many datagrams.
     token_bucket_t assoc_limit {10, 20};  ///< Receive thread only.
 
     // Counters written by the video sender, read when logging.
-    std::atomic<std::uint64_t> primary_shards {0};
-    std::atomic<std::uint64_t> secondary_shards {0};
-    std::atomic<std::uint64_t> secondary_bytes {0};
-    std::atomic<std::uint64_t> cap_skips {0};
-    std::atomic<std::uint64_t> send_errors {0};
+    std::atomic<std::uint64_t> primary_shards {0};  ///< Shards sent on the primary path.
+    std::atomic<std::uint64_t> secondary_shards {0};  ///< Shards sent on the secondary path.
+    std::atomic<std::uint64_t> secondary_bytes {0};  ///< Wire bytes sent on the secondary path.
+    std::atomic<std::uint64_t> cap_skips {0};  ///< Secondary shards skipped by the rate cap.
+    std::atomic<std::uint64_t> send_errors {0};  ///< Failed secondary sends.
 
     // Video sender thread only.
-    token_bucket_t cap;
-    bool active = false;
-    std::uint64_t blocks = 0;
-    std::chrono::steady_clock::time_point started {};
-    std::chrono::steady_clock::time_point last_log {};
+    token_bucket_t cap;  ///< Secondary byte cap.
+    bool active = false;  ///< Whether the sender currently treats the secondary as usable.
+    std::uint64_t blocks = 0;  ///< FEC blocks sent, for the test drop knob.
+    std::chrono::steady_clock::time_point started {};  ///< Time of the first FEC block.
+    std::chrono::steady_clock::time_point last_log {};  ///< Time of the last periodic summary.
     int outage_phase = 0;  ///< 0 before, 1 during, 2 after the test outage.
 
-    /// True when a secondary endpoint presented the secret recently enough to be used.
+    /**
+     * @brief True when a secondary endpoint presented the secret recently enough to be used.
+     * @param now Current steady-clock milliseconds.
+     */
     bool fresh(std::int64_t now) const {
       return peer.load() != 0 && now - last_seen_ms.load() < ASSOC_TIMEOUT_MS;
     }
 
-    /// One bounded line; contains counters only, never keys or payloads.
+    /**
+     * @brief Format one bounded log line containing counters only, never keys or payloads.
+     * @param mode Active mode.
+     * @param final_line Mark the session-end line.
+     */
     std::string summary(mode_e mode, bool final_line) const {
       std::ostringstream ss;
       ss << "multilink: mode=" << (mode == mode_e::duplicate ? "duplicate" : "parity")
