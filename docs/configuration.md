@@ -2118,6 +2118,36 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
     </tr>
 </table>
 
+### multilink
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Experimental. Also send video shards to a second client network path
+            (for example Wi-Fi alongside Ethernet) when the client requests it.
+            <code>duplicate</code> sends every shard on both paths; <code>parity</code> sends only
+            parity shards on the second path. Requires video encryption.
+            <code>multilink_secondary_max_kbps</code> caps the second path (<code>0</code> is unlimited).
+            The <code>multilink_test_drop_every_n_blocks</code>, <code>multilink_test_outage_primary_start_s</code>
+            and <code>multilink_test_outage_primary_duration_s</code> options deliberately drop primary-path
+            shards and are for testing only.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            multilink = duplicate
+            @endcode</td>
+    </tr>
+</table>
+
 ### qp
 
 <table>

@@ -38,6 +38,8 @@ namespace stream {
 
     uint32_t encryptionFlagsEnabled;  ///< Bitmask of GameStream encryption features enabled for the session.
 
+    bool multilink = false;  ///< Multilink video duplication negotiated (host enabled, client requested, video encrypted).
+
     std::optional<int> gcmap;  ///< Optional game-controller mapping override from the launch request.
   };
 

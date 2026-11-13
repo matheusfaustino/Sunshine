@@ -892,6 +892,11 @@ namespace rtsp_stream {
       if (encryption_mode == config::ENCRYPTION_MODE_MANDATORY) {
         encryption_flags_requested |= SS_ENC_VIDEO | SS_ENC_AUDIO;
       }
+
+      // Secondary-path copies reuse the encrypted video bytes, so only offer multilink when video can be encrypted.
+      if (config::stream.multilink.mode != multilink::mode_e::disabled) {
+        ss << "a=x-mp-general.version:1"sv << std::endl;
+      }
     }
 
     // Report supported and required encryption flags
@@ -1086,6 +1091,7 @@ namespace rtsp_stream {
     args.try_emplace("x-nv-aqos.qosTrafficType"sv, "4"sv);
     args.try_emplace("x-ml-video.configuredBitrateKbps"sv, "0"sv);
     args.try_emplace("x-ss-general.encryptionEnabled"sv, "0"sv);
+    args.try_emplace("x-mp-general.request"sv, "0"sv);
     args.try_emplace("x-ss-video[0].chromaSamplingType"sv, "0"sv);
     args.try_emplace("x-ss-video[0].intraRefresh"sv, "0"sv);
     args.try_emplace("x-nv-video[0].clientRefreshRateX100"sv, "0"sv);
@@ -1113,6 +1119,11 @@ namespace rtsp_stream {
       // Legacy clients use nvFeatureFlags to indicate support for audio encryption
       if (util::from_view(args.at("x-nv-general.featureFlags"sv)) & 0x20) {
         config.encryptionFlagsEnabled |= SS_ENC_AUDIO;
+      }
+
+      if (config::stream.multilink.mode != multilink::mode_e::disabled && util::from_view(args.at("x-mp-general.request"sv)) == 1) {
+        config.multilink = (config.encryptionFlagsEnabled & SS_ENC_VIDEO) != 0;
+        BOOST_LOG(info) << "multilink: client requested, "sv << (config.multilink ? "enabled"sv : "refused (video encryption is off for this session)"sv);
       }
 
       // Limit the packetsize to avoid fragmentation with clients that cannot configure this value
