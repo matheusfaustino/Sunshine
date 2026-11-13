@@ -2034,7 +2034,8 @@ namespace stream {
                 batch_primary,
                 send_primary,
                 send_secondary,
-                on_batch_fallback);
+                on_batch_fallback
+              );
               if (session->config.multilink) {
                 ml.primary_shards += primary_sent;
               }
