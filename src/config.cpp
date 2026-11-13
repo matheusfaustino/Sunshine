@@ -815,6 +815,7 @@ namespace config {
     ENCRYPTION_MODE_OPPORTUNISTIC,  // wan_encryption_mode
     0,  // packetsize
     true,  // dscp_tagging
+    {},  // ml
   };
 
   /**
