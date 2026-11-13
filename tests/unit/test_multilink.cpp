@@ -18,12 +18,12 @@ TEST(MultilinkTest, ParsesOnlyVersionOnePathOneAssociation) {
   bad[4] = 2;
   EXPECT_FALSE(multilink::parse_association(bad));
   bad = d;
-  bad[20] = 0;
+  bad[21] = 0;
   EXPECT_FALSE(multilink::parse_association(bad));
   bad = d;
   bad[0] = 'X';
   EXPECT_FALSE(multilink::parse_association(bad));
-  EXPECT_FALSE(multilink::parse_association(d.substr(0, 20)));
+  EXPECT_FALSE(multilink::parse_association(d.substr(0, 21)));
 }
 
 TEST(MultilinkTest, TokenBucketLimitsAndRefills) {

@@ -39,7 +39,7 @@ namespace multilink {
     int test_outage_primary_duration_s = 0;  ///< Test only: primary outage length; 0 disables.
   };
 
-  constexpr std::size_t ASSOC_SIZE = 21;  ///< 'M','L','M','P' | version=1 | 16-byte ping payload | path_id=1.
+  constexpr std::size_t ASSOC_SIZE = 22;  ///< 'M','L','M','P' | version=1 | 16-byte ping payload | path_id=1.
   constexpr std::int64_t ASSOC_TIMEOUT_MS = 2000;
 
   /**
@@ -47,7 +47,7 @@ namespace multilink {
    * @return The 16-byte payload view, or nullopt if the datagram is not a version 1, path 1 association.
    */
   inline std::optional<std::string_view> parse_association(std::string_view datagram) {
-    if (datagram.size() != ASSOC_SIZE || datagram.substr(0, 4) != "MLMP" || datagram[4] != 1 || datagram[20] != 1) {
+    if (datagram.size() != ASSOC_SIZE || datagram.substr(0, 4) != "MLMP" || datagram[4] != 1 || datagram[21] != 1) {
       return std::nullopt;
     }
     return datagram.substr(5, 16);
